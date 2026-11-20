@@ -66,6 +66,19 @@
     <string name="perm_granted">Bluetooth-Berechtigung erteilt!</string>
     <string name="perm_denied">Bitte Bluetooth-Berechtigung in den Android-Einstellungen zulassen!</string>
 
+    <string name="btn_commands">Befehle</string>
+    <string name="cmd_title">Schnellbefehle</string>
+    <string name="cmd_search_hint">Aktion oder Profil suchen…</string>
+    <string name="cmd_empty">Keine passenden Befehle</string>
+    <string name="action_undo">Rückgängig</string>
+    <string name="profile_short_1">P1</string>
+    <string name="profile_short_2">P2</string>
+    <string name="profile_short_3">P3</string>
+    <string name="profile_short_4">P4</string>
+    <string name="light_state_on">Licht AN</string>
+    <string name="light_state_off">Licht AUS</string>
+    <string name="cmd_toggle_dev_log">Entwickler BLE-Log umschalten</string>
+
     <string-array name="patterns_array">
         <item>0: Dauerlicht (Constant)</item>
         <item>1: Sanft Pulsieren (Glow)</item>

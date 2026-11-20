@@ -66,6 +66,19 @@
     <string name="perm_granted">Bluetooth permission granted!</string>
     <string name="perm_denied">Please allow Bluetooth permissions in Android Settings!</string>
 
+    <string name="btn_commands">Commands</string>
+    <string name="cmd_title">Quick Commands</string>
+    <string name="cmd_search_hint">Search action or profile…</string>
+    <string name="cmd_empty">No matching commands</string>
+    <string name="action_undo">Undo</string>
+    <string name="profile_short_1">P1</string>
+    <string name="profile_short_2">P2</string>
+    <string name="profile_short_3">P3</string>
+    <string name="profile_short_4">P4</string>
+    <string name="light_state_on">Light ON</string>
+    <string name="light_state_off">Light OFF</string>
+    <string name="cmd_toggle_dev_log">Toggle Developer BLE Log</string>
+
     <string-array name="patterns_array">
         <item>0: Constant Light</item>
         <item>1: Gentle Glow (Pulse)</item>

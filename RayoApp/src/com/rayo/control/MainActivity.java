@@ -6,7 +6,7 @@ import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -18,7 +18,6 @@ import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,10 +31,12 @@ public class MainActivity extends Activity implements BleManager.BleListener {
     private boolean isLightOn = false;
     private boolean isConnected = false;
     private int currentProfile = 0; // 0..3
+    private int lastBatteryPercent = -1;
 
     private TextView tvStatus;
     private TextView tvBattery;
     private Button btnScan;
+    private Button btnCommandPalette;
 
     private Button btnLightOn;
     private Button btnLightOff;
@@ -57,9 +58,11 @@ public class MainActivity extends Activity implements BleManager.BleListener {
 
     private Switch swTheft;
     private Button btnApplyFeatures;
+    private Switch swShowDevOptions;
 
     private TextView tvBleLog;
     private Button btnClearLog;
+    private UiDesignHelpers.FloatingToastController floatingToast;
     private long lastUserProfileSelectTime = 0;
 
     private String[] patterns;
@@ -83,6 +86,13 @@ public class MainActivity extends Activity implements BleManager.BleListener {
         tvStatus = findViewById(R.id.tvStatus);
         tvBattery = findViewById(R.id.tvBattery);
         btnScan = findViewById(R.id.btnScan);
+        btnCommandPalette = findViewById(R.id.btnCommandPalette);
+
+        floatingToast = new UiDesignHelpers.FloatingToastController(
+                findViewById(R.id.layoutFloatingToast),
+                (TextView) findViewById(R.id.tvToastMessage),
+                (Button) findViewById(R.id.btnToastUndo)
+        );
 
         btnLightOn = findViewById(R.id.btnLightOn);
         btnLightOff = findViewById(R.id.btnLightOff);
@@ -210,36 +220,30 @@ public class MainActivity extends Activity implements BleManager.BleListener {
             }
         });
 
-        // 1. DEDICATED LIGHT ON BUTTON
+        // 1. DEDICATED LIGHT ON SEGMENT
         btnLightOn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                isLightOn = true;
-                bleManager.setLight(true, swTheft.isChecked());
-                Toast.makeText(MainActivity.this, getString(R.string.toast_light_on), Toast.LENGTH_SHORT).show();
+                setLightWithUndo(true);
             }
         });
 
-        // 2. DEDICATED LIGHT OFF BUTTON
+        // 2. DEDICATED LIGHT OFF SEGMENT
         btnLightOff.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                isLightOn = false;
-                bleManager.setLight(false, swTheft.isChecked());
-                Toast.makeText(MainActivity.this, getString(R.string.toast_light_off), Toast.LENGTH_SHORT).show();
+                setLightWithUndo(false);
             }
         });
+        updatePowerSegmentUI(false);
 
-        // 3. PROFILE BUTTONS
+        // 3. PROFILE SEGMENTED CONTROL
         for (int i = 0; i < 4; i++) {
             final int pIdx = i;
             btnProfiles[i].setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    lastUserProfileSelectTime = System.currentTimeMillis();
-                    selectProfileUI(pIdx);
-                    bleManager.selectProfile(pIdx);
-                    Toast.makeText(MainActivity.this, getString(R.string.toast_profile_selected, pIdx + 1), Toast.LENGTH_SHORT).show();
+                    selectProfileWithUndo(pIdx);
                 }
             });
         }
@@ -258,12 +262,12 @@ public class MainActivity extends Activity implements BleManager.BleListener {
             @Override
             public void onClick(View v) {
                 bleManager.setLight(isLightOn, swTheft.isChecked());
-                Toast.makeText(MainActivity.this, getString(R.string.toast_alarm_applied), Toast.LENGTH_SHORT).show();
+                floatingToast.show(getString(R.string.toast_alarm_applied), null);
             }
         });
 
         // 6. DEVELOPER OPTIONS (COLLAPSIBLE BLE LOG)
-        Switch swShowDevOptions = findViewById(R.id.swShowDevOptions);
+        swShowDevOptions = findViewById(R.id.swShowDevOptions);
         final View layoutDevLogContainer = findViewById(R.id.layoutDevLogContainer);
         if (swShowDevOptions != null && layoutDevLogContainer != null) {
             swShowDevOptions.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -285,6 +289,23 @@ public class MainActivity extends Activity implements BleManager.BleListener {
             });
         }
 
+        // Command Palette button
+        if (btnCommandPalette != null) {
+            btnCommandPalette.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    openCommandPalette();
+                }
+            });
+        }
+
+        UiDesignHelpers.attachPressFeedback(
+                btnScan, btnCommandPalette,
+                btnLightOn, btnLightOff,
+                btnProfiles[0], btnProfiles[1], btnProfiles[2], btnProfiles[3],
+                btnApplyLeds, btnApplyFeatures, btnClearLog
+        );
+
         // 7. BUY ME A COFFEE
         View btnBuyMeACoffee = findViewById(R.id.btnBuyMeACoffee);
         if (btnBuyMeACoffee != null) {
@@ -300,10 +321,122 @@ public class MainActivity extends Activity implements BleManager.BleListener {
         }
     }
 
+    private void setLightWithUndo(final boolean turnOn) {
+        final boolean prevState = isLightOn;
+        isLightOn = turnOn;
+        updatePowerSegmentUI(turnOn);
+        bleManager.setLight(turnOn, swTheft.isChecked());
+        String msg = getString(turnOn ? R.string.toast_light_on : R.string.toast_light_off);
+        floatingToast.show(msg, (prevState != turnOn) ? new Runnable() {
+            @Override
+            public void run() {
+                isLightOn = prevState;
+                updatePowerSegmentUI(prevState);
+                bleManager.setLight(prevState, swTheft.isChecked());
+            }
+        } : null);
+    }
+
+    private void selectProfileWithUndo(final int pIdx) {
+        final int prevProfile = currentProfile;
+        lastUserProfileSelectTime = System.currentTimeMillis();
+        selectProfileUI(pIdx);
+        bleManager.selectProfile(pIdx);
+        String msg = getString(R.string.toast_profile_selected, pIdx + 1);
+        floatingToast.show(msg, (prevProfile != pIdx) ? new Runnable() {
+            @Override
+            public void run() {
+                lastUserProfileSelectTime = System.currentTimeMillis();
+                selectProfileUI(prevProfile);
+                bleManager.selectProfile(prevProfile);
+            }
+        } : null);
+    }
+
+    private void openCommandPalette() {
+        List<UiDesignHelpers.CommandItem> cmds = new ArrayList<>();
+        cmds.add(new UiDesignHelpers.CommandItem(
+                getString(isConnected ? R.string.btn_disconnect : R.string.btn_scan),
+                tvStatus.getText().toString(),
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        btnScan.performClick();
+                    }
+                }
+        ));
+        cmds.add(new UiDesignHelpers.CommandItem(
+                getString(R.string.light_state_on),
+                getString(R.string.sec_power_switch),
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        setLightWithUndo(true);
+                    }
+                }
+        ));
+        cmds.add(new UiDesignHelpers.CommandItem(
+                getString(R.string.light_state_off),
+                getString(R.string.sec_power_switch),
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        setLightWithUndo(false);
+                    }
+                }
+        ));
+        for (int i = 0; i < 4; i++) {
+            final int idx = i;
+            cmds.add(new UiDesignHelpers.CommandItem(
+                    getString(R.string.toast_profile_selected, idx + 1),
+                    getString(R.string.sec_profiles),
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            selectProfileWithUndo(idx);
+                        }
+                    }
+            ));
+        }
+        cmds.add(new UiDesignHelpers.CommandItem(
+                getString(R.string.btn_apply_leds),
+                getString(R.string.sec_led_patterns),
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        applyCurrentPatterns(true);
+                    }
+                }
+        ));
+        cmds.add(new UiDesignHelpers.CommandItem(
+                getString(R.string.btn_apply_alarm),
+                getString(R.string.sec_smart_features),
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        btnApplyFeatures.performClick();
+                    }
+                }
+        ));
+        if (swShowDevOptions != null) {
+            cmds.add(new UiDesignHelpers.CommandItem(
+                    getString(R.string.cmd_toggle_dev_log),
+                    getString(R.string.sec_developer_options),
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            swShowDevOptions.setChecked(!swShowDevOptions.isChecked());
+                        }
+                    }
+            ));
+        }
+        UiDesignHelpers.showCommandPalette(this, cmds);
+    }
+
     private void applyCurrentPatterns(boolean showToast) {
         if (!isConnected) {
             if (showToast) {
-                Toast.makeText(this, getString(R.string.status_disconnected), Toast.LENGTH_SHORT).show();
+                floatingToast.show(getString(R.string.status_disconnected), null);
             }
             return;
         }
@@ -329,17 +462,47 @@ public class MainActivity extends Activity implements BleManager.BleListener {
 
         bleManager.setModePattern(currentProfile, masterBright, topBri, top, midBri, mid, botBri, bot, brake, brakeSens, perLed);
         if (showToast) {
-            Toast.makeText(this, getString(R.string.toast_apply_leds), Toast.LENGTH_SHORT).show();
+            floatingToast.show(getString(R.string.toast_apply_leds), null);
+        }
+    }
+
+    private void updatePowerSegmentUI(boolean on) {
+        int primaryText = getColor(R.color.text_primary);
+        int secondaryText = getColor(R.color.text_secondary);
+        int okText = getColor(R.color.status_ok_fg);
+
+        if (on) {
+            btnLightOn.setBackgroundResource(R.drawable.bg_segment_ok);
+            btnLightOn.setTextColor(okText);
+            btnLightOn.setTypeface(null, Typeface.BOLD);
+
+            btnLightOff.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+            btnLightOff.setTextColor(secondaryText);
+            btnLightOff.setTypeface(null, Typeface.NORMAL);
+        } else {
+            btnLightOff.setBackgroundResource(R.drawable.bg_segment_active);
+            btnLightOff.setTextColor(primaryText);
+            btnLightOff.setTypeface(null, Typeface.BOLD);
+
+            btnLightOn.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+            btnLightOn.setTextColor(secondaryText);
+            btnLightOn.setTypeface(null, Typeface.NORMAL);
         }
     }
 
     private void selectProfileUI(int index) {
         currentProfile = index;
+        int primaryText = getColor(R.color.text_primary);
+        int secondaryText = getColor(R.color.text_secondary);
         for (int i = 0; i < 4; i++) {
             if (i == index) {
-                btnProfiles[i].setBackgroundColor(0xFFFF2A55); // Highlight red
+                btnProfiles[i].setBackgroundResource(R.drawable.bg_segment_active);
+                btnProfiles[i].setTextColor(primaryText);
+                btnProfiles[i].setTypeface(null, Typeface.BOLD);
             } else {
-                btnProfiles[i].setBackgroundColor(0xFF282A33); // Dark gray
+                btnProfiles[i].setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                btnProfiles[i].setTextColor(secondaryText);
+                btnProfiles[i].setTypeface(null, Typeface.NORMAL);
             }
         }
         tvActiveProfile.setText(getString(R.string.active_profile_format, index + 1));
@@ -389,9 +552,9 @@ public class MainActivity extends Activity implements BleManager.BleListener {
                 if (res != PackageManager.PERMISSION_GRANTED) allGranted = false;
             }
             if (allGranted) {
-                Toast.makeText(this, getString(R.string.perm_granted), Toast.LENGTH_SHORT).show();
+                floatingToast.show(getString(R.string.perm_granted), null);
             } else {
-                Toast.makeText(this, getString(R.string.perm_denied), Toast.LENGTH_LONG).show();
+                floatingToast.show(getString(R.string.perm_denied), null);
             }
         }
     }
@@ -402,26 +565,34 @@ public class MainActivity extends Activity implements BleManager.BleListener {
         this.isConnected = connected;
         if (connected) {
             tvStatus.setText(getString(R.string.status_connected, deviceName, mac));
-            tvStatus.setTextColor(0xFF00E676);
+            tvStatus.setTextColor(getColor(R.color.status_ok_fg));
             btnScan.setText(R.string.btn_disconnect);
-            btnScan.setBackgroundColor(0xFF444444);
+            btnScan.setBackgroundResource(R.drawable.bg_btn_destructive);
+            btnScan.setTextColor(getColor(R.color.destructive_tint_fg));
         } else {
+            lastBatteryPercent = -1;
             tvStatus.setText(R.string.status_disconnected);
-            tvStatus.setTextColor(0xFF9E9EA7);
+            tvStatus.setTextColor(getColor(R.color.text_secondary));
             tvBattery.setText(R.string.battery_placeholder);
+            tvBattery.setTextColor(getColor(R.color.text_secondary));
             btnScan.setText(R.string.btn_scan);
-            btnScan.setBackgroundColor(0xFFFF2A55);
+            btnScan.setBackgroundResource(R.drawable.bg_btn_primary);
+            btnScan.setTextColor(getColor(R.color.accent_on_primary));
         }
     }
 
     @Override
     public void onBatteryUpdate(int percent) {
-        tvBattery.setText(getString(R.string.battery_format, percent));
+        int prev = lastBatteryPercent;
+        lastBatteryPercent = percent;
+        tvBattery.setTextColor(getColor(percent <= 20 ? R.color.status_warn_fg : R.color.status_ok_fg));
+        UiDesignHelpers.animateIntText(tvBattery, prev, percent, getString(R.string.battery_format));
     }
 
     @Override
     public void onLightStateUpdate(boolean isOn) {
         this.isLightOn = isOn;
+        updatePowerSegmentUI(isOn);
     }
 
     @Override
@@ -467,7 +638,7 @@ public class MainActivity extends Activity implements BleManager.BleListener {
             spnLedBot.setSelection(botPat);
         }
 
-        Toast.makeText(this, getString(R.string.toast_profile_loaded, mode + 1), Toast.LENGTH_SHORT).show();
+        floatingToast.show(getString(R.string.toast_profile_loaded, mode + 1), null);
     }
 
     @Override
