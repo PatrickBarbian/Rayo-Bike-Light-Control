@@ -39,7 +39,7 @@
                         android:paddingEnd="8dp"
                         android:text="@string/header_title"
                         android:textColor="@color/text_primary"
-                        android:textSize="20sp"
+                        android:textSize="18sp"
                         android:textStyle="bold" />
 
                     <TextView
