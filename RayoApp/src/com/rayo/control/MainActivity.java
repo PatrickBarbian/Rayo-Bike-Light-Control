@@ -36,12 +36,12 @@ public class MainActivity extends Activity implements BleManager.BleListener {
     private TextView tvStatus;
     private TextView tvBattery;
     private Button btnScan;
-    private Button btnCommandPalette;
+    private TextView btnCommandPalette;
 
-    private Button btnLightOn;
-    private Button btnLightOff;
+    private TextView btnLightOn;
+    private TextView btnLightOff;
 
-    private Button[] btnProfiles = new Button[4];
+    private TextView[] btnProfiles = new TextView[4];
     private TextView tvActiveProfile;
 
     private TextView tvBrightnessLabel;
